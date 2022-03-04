@@ -23,9 +23,9 @@
 
 static const char  sWeaponData[][] =
 {
-	// 							+WEAPON_NAME	+WEAPON_CMD
+	//				+WEAPON_NAME		+WEAPON_CMD
 	"weapon_pistol_magnum", 	"Magnum", 		"sm_magnum",		// Deagle
-	"weapon_sniper_scout", 		"Scout", 		"sm_scout"			// Scout
+	"weapon_sniper_scout", 		"Scout", 		"sm_scout"		// Scout
 };
 
 int g_iVotingItem = 0;
@@ -40,7 +40,7 @@ bool g_bRoundIsLive = false;
 
 public Plugin myinfo =
 {
-  name = "Weapon vote",
+	name = "Weapon vote",
 	author = "TouchMe",
 	description = "Issues weapons based on voting results",
 	version = "1.0"
@@ -128,7 +128,7 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 public Action OnClientSayCommand(int iClient, const char[] sSayCmd, const char[] sArgs)
 {
 	if(iClient != 0 && !IsFakeClient(iClient))
-    {
+	{
 		char sCmd[32];
 
 		for (int item = 0; item < sizeof(sWeaponData); item += 3)
@@ -144,7 +144,7 @@ public Action OnClientSayCommand(int iClient, const char[] sSayCmd, const char[]
 				return Plugin_Handled;
 			}
 		}
-    }
+ 	}
 
 	return Plugin_Continue;
 }
@@ -211,7 +211,8 @@ public void ShowMenu(int iClient)
 
 public int HandleClickMenu(Menu hMenu, MenuAction iAction, int iClient, int iIndex)
 {
-	switch (iAction) {
+	switch (iAction) 
+	{
 		case MenuAction_Select: {
 			// Is a new vote allowed?
 			if (!IsNewBuiltinVoteAllowed()) {
