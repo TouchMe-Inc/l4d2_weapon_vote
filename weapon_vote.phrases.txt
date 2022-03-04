@@ -1,0 +1,41 @@
+"Phrases"
+{
+	"IF_LEFT_READYUP"
+	{
+		"en"			"Vote didnot pass before you left ready-up"
+		"ru"			"Доступно {olive}только во время ReadyUp"
+	}
+
+	"IF_COULDOWN"
+	{
+		"#format"		"{1:d}"
+		"en"			"{olive}A vote cannot be called at this moment, try again in a {1} second"
+		"ru"			"{olive}Сейчас голосование недоступно. Подождите {default}{1} сек"
+	}
+
+	"IF_ROUND_LIVE"
+	{
+		"en"			"{olive}The round has already begun"
+		"ru"			"{olive}Раунд уже начался"
+	}
+
+	"VOTE_TITLE"
+	{
+		"#format"		"{1:N},{2:s}"
+		"en"			"{1} get {2}"
+		"ru"			"{1} хочет получить {2}"
+	}
+
+	"VOTE_PASS"
+	{
+		"#format"		"{1:N},{2:s}"
+		"en"			"{1} set {2}"
+		"ru"			"{1} получил {2}"
+	}
+
+	"MENU_TITLE"
+	{
+		"en"			"Select weapon"
+		"ru"			"Выберите оружие"
+	}
+}
