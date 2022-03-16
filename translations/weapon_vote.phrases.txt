@@ -1,5 +1,11 @@
 "Phrases"
 {
+	"IF_NOT_SURV"
+	{
+		"en"			"{olive}The team is only available to {default}survivors"
+		"ru"			"{olive}Команда доступна только для {default}выживших"
+	}
+
 	"IF_LEFT_READYUP"
 	{
 		"en"			"Vote didnot pass before you left ready-up"

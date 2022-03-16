@@ -9,43 +9,72 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define TIMER_DELAY 15
+#define TIMER_VOTE_HIDE 15
 
 #define MAX_VOTE_MESSAGE_LENGTH 128
-#define MAX_ENTITY_NAME_LENGTH 64
+
+#define MAX_WEAPON_DATA_ID 32
+#define MAX_WEAPON_DATA_NAME 64
+#define MAX_WEAPON_DATA_CMD 32
 
 #define TEAM_SPEC 1
 #define TEAM_SURV 2
 
-#define WEAPON_NAME 1
-#define WEAPON_CMD 2
 
-
-static const char  sWeaponData[][] =
+enum struct WeaponData
 {
-	//				+WEAPON_NAME		+WEAPON_CMD
-	"weapon_pistol_magnum", 	"Magnum", 		"sm_magnum",		// Deagle
-	"weapon_sniper_scout", 		"Scout", 		"sm_scout"		// Scout
-};
+	ArrayList id;
+	ArrayList name;
+	ArrayList cmd;
+}
 
-int g_iVotingItem = 0;
+int 
+	g_iVotingItem = 0,
+	g_iWeaponDataNum = 0;
 
-Menu g_hMenu = null;
+bool
+	g_bReadyUpAvailable = false,
+	g_bRoundIsLive = false;
 
-Handle g_hVote = null;
+Menu 
+	g_hMenu = null;
 
-bool g_bReadyUpAvailable = false;
+Handle 
+	g_hVote = null;
 
-bool g_bRoundIsLive = false;
+WeaponData 
+	g_hWeaponData;
+
 
 public Plugin myinfo =
 {
 	name = "Weapon vote",
 	author = "TouchMe",
 	description = "Issues weapons based on voting results",
-	version = "1.0"
+	version = "1.0rc"
 };
 
+public void OnPluginStart()
+{
+	InitTranslations();
+
+	InitWeaponData();
+
+	ReadWeaponDataFile();	
+
+	InitMenu();
+
+	RegConsoleCmd("sm_wv", Cmd_ShowMenu);
+
+	HookEvent("player_left_start_area", Event_LeftStartArea, EventHookMode_PostNoCopy);
+	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
+}
+
+/**
+  * Called before OnPluginStart.
+  *
+  * @noreturn
+  */
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	EngineVersion engine = GetEngineVersion();
@@ -58,6 +87,11 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	return APLRes_Success;
 }
 
+/**
+  * Loads dictionary files. On failure, stops the plugin execution.
+  *
+  * @noreturn
+  */
 void InitTranslations() 
 {
 	char sPath[PLATFORM_MAX_PATH];
@@ -65,32 +99,161 @@ void InitTranslations()
 
 	if (FileExists(sPath)) {
 		LoadTranslations("weapon_vote.phrases");
+	} else {
+		SetFailState("Path %s not found", sPath);
 	}
 }
 
-public void OnPluginStart()
+void InitWeaponData()
 {
-	InitTranslations();
-
-	RegConsoleCmd("sm_wv", Cmd_ShowMenu);
-
-	HookEvent("player_left_start_area", Event_LeftStartArea, EventHookMode_PostNoCopy);
-	HookEvent("round_start", Event_RoundStart, EventHookMode_PostNoCopy);
-
-	InitMenu();
+	g_hWeaponData.id = new ArrayList(MAX_WEAPON_DATA_ID);
+	g_hWeaponData.name = new ArrayList(MAX_WEAPON_DATA_NAME);
+	g_hWeaponData.cmd = new ArrayList(MAX_WEAPON_DATA_CMD);
 }
 
-// ------------------------------------------------------------------------------------- READYUP
-public void OnAllPluginsLoaded()
+void AddWeaponData(const char[] sId, const char[] sName, const char[] sCmd)
 {
+	g_hWeaponData.id.PushString(sId);
+	g_hWeaponData.name.PushString(sName);
+	g_hWeaponData.cmd.PushString(sCmd);
+
+	g_iWeaponDataNum++;
+}
+
+/**
+  * File reader. Opens and reads lines in config/weapon_vote.ini.
+  *
+  * @noreturn
+  */
+void ReadWeaponDataFile()
+{
+	char sPath[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, sPath, PLATFORM_MAX_PATH, "configs/weapon_vote.ini");
+	
+	if (!FileExists(sPath)) {
+		SetFailState("Path %s not found", sPath);
+	}
+
+	File file = OpenFile(sPath, "rt");
+	if (!file)
+	{
+		SetFailState("Could not open file!");
+		return;
+	}
+	
+	while (!file.EndOfFile())
+	{
+		char line[255];
+		if (!file.ReadLine(line, sizeof(line)))
+			break;
+		
+		/* Trim comments */
+		int len = strlen(line);
+		bool ignoring = false;
+		for (int i=0; i<len; i++)
+		{
+			if (ignoring)
+			{
+				if (line[i] == '"')
+					ignoring = false;
+			} else {
+				if (line[i] == '"')
+				{
+					ignoring = true;
+				} else if (line[i] == ';') {
+					line[i] = '\0';
+					break;
+				} else if (line[i] == '/'
+							&& i != len - 1
+							&& line[i+1] == '/')
+				{
+					line[i] = '\0';
+					break;
+				}
+			}
+		}
+		
+		TrimString(line);
+		
+		if ((line[0] == '/' && line[1] == '/')
+			|| (line[0] == ';' || line[0] == '\0'))
+		{
+			continue;
+		}
+	
+		ParseWeaponData(line);
+	}
+	
+	file.Close();
+}
+
+/**
+  * File line parser.
+  *
+  * @param sLine 			Line. Pattern: "weapon_*" "*" "sm_*"
+  *
+  * @noreturn
+  */
+void ParseWeaponData(const char[] sLine)
+{
+	int iPos, iNextPos;
+
+	// Get weapon_* id
+	char sId[MAX_WEAPON_DATA_ID];
+	iNextPos = BreakString(sLine, sId, sizeof(sId));
+	iPos = iNextPos;
+	
+
+	// Get Weapon name (Menu item name)
+	if (iNextPos == -1) {
+		// Weapon name not found
+		return;
+	}
+
+	char sName[MAX_WEAPON_DATA_NAME];
+	iNextPos = BreakString(sLine[iPos], sName, sizeof(sName));
+	iPos += iNextPos;
+
+
+	// Get weapon cmd
+	if (iNextPos == -1) {
+		// Cmd not found
+		return;
+	}
+
+	char sCmd[MAX_WEAPON_DATA_CMD];
+	BreakString(sLine[iPos], sCmd, sizeof(sCmd));
+
+	AddWeaponData(sId, sName, sCmd);
+}
+
+/**
+  * Global event. Called when all plugins loaded.
+  *
+  * @noreturn
+  */
+public void OnAllPluginsLoaded() {
 	g_bReadyUpAvailable = LibraryExists("readyup");
 }
 
-public void OnLibraryRemoved(const char[] sName)
-{
+/**
+  * Global event. Called when a library is removed.
+  *
+  * @param sName 			Library name.
+  *
+  * @noreturn
+  */
+public void OnLibraryRemoved(const char[] sName) {
 	if (StrEqual(sName, "readyup")) g_bReadyUpAvailable = false;
 }
 
+/**
+  * Global event. Called when a library is added.
+  *
+  * @param sName 			Library name.
+  *
+  * @noreturn
+  */
 public void OnLibraryAdded(const char[] sName)
 {
 	if (StrEqual(sName, "readyup")) {
@@ -99,24 +262,38 @@ public void OnLibraryAdded(const char[] sName)
 }
 
 /**
-  * Глобальное событие, которое вызывается, когда все игроки готовы.
+  * @requared readyup
+  * Global event. Called when all players are ready.
   *
   * @noreturn
   */
-public void OnRoundIsLive()
-{
+public void OnRoundIsLive() {
 	g_hMenu.Cancel();
 }
 
-// ------------------------------------------------------------------------------------- EVENT
+/**
+  * Out of safe zone event.
+  *
+  * @params  				see events.inc > HookEvent.
+  *
+  * @noreturn
+  */
 public Action Event_LeftStartArea(Event event, const char[] name, bool dontBroadcast)
 {
-	if (!g_bReadyUpAvailable) {
+	if (!g_bReadyUpAvailable) 
+	{
 		g_bRoundIsLive = true;
 		g_hMenu.Cancel();
 	}	
 }
 
+/**
+  * Round start event.
+  *
+  * @params  				see events.inc > HookEvent.
+  *
+  * @noreturn
+  */
 public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if (!g_bReadyUpAvailable) {
@@ -124,44 +301,30 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 	}
 }
 
-// ------------------------------------------------------------------------------------- CMD
-public Action OnClientSayCommand(int iClient, const char[] sSayCmd, const char[] sArgs)
+/**
+  * Global listener for the chat commands.
+  *
+  * @param iClient			Client index.
+  * @param sArgs			Chat argument string.
+  *
+  * @return Plugin_Handled | Plugin_Continue
+  */
+public Action OnClientSayCommand(int iClient, const char[] sCommand, const char[] sArgs)
 {
-	if(iClient != 0 && !IsFakeClient(iClient))
-	{
-		char sCmd[32];
-
-		for (int item = 0; item < sizeof(sWeaponData); item += 3)
-		{
-			strcopy(sCmd, sizeof(sCmd), sWeaponData[item + WEAPON_CMD][3]);
-
-			if ((sArgs[0] == '/' || sArgs[0] == '!') && StrContains(sArgs, sCmd) != -1)
-			{
-				if (CanClientStartVote(iClient)) {
-					ForceVote(iClient, item);
-				}
-				
-				return Plugin_Handled;
-			}
-		}
- 	}
-
-	return Plugin_Continue;
-}
-
-public Action OnClientCommand(int iClient, int sArgs)
-{
-	if(iClient != 0 && !IsFakeClient(iClient))
+	if(iClient && !IsFakeClient(iClient))
     {
-		char sCmd[32];
-  		GetCmdArg(0, sCmd, sizeof(sCmd));
+		char sClearCmd[MAX_WEAPON_DATA_CMD];
+		char sCmd[MAX_WEAPON_DATA_CMD];
 
-		for (int item = 0; item < sizeof(sWeaponData); item += 3)
+		for (int item = 0; item < g_iWeaponDataNum; item++)
 		{
-			if (StrEqual(sCmd, sWeaponData[item + WEAPON_CMD]))
+			g_hWeaponData.cmd.GetString(item, sCmd, sizeof(sCmd));
+			strcopy(sClearCmd, sizeof(sClearCmd), sCmd[3]);
+
+			if ((sArgs[0] == '/' || sArgs[0] == '!') && StrContains(sArgs, sClearCmd) != -1)
 			{
 				if (CanClientStartVote(iClient)) {
-					ForceVote(iClient, item);
+					StartVote(iClient, item);
 				}
 				
 				return Plugin_Handled;
@@ -172,47 +335,100 @@ public Action OnClientCommand(int iClient, int sArgs)
 	return Plugin_Continue;
 }
 
+/**
+  * Called when a client is sending a command.
+  *
+  * @param iClient			Client index.
+  * @param iArgs			Number of arguments.
+  *
+  * @return Plugin_Handled | Plugin_Continue
+  */
+public Action OnClientCommand(int iClient, int sArgs)
+{
+	if(iClient && !IsFakeClient(iClient))
+    {
+		char sArgCmd[MAX_WEAPON_DATA_CMD];
+		char sCmd[MAX_WEAPON_DATA_CMD];
+  		GetCmdArg(0, sArgCmd, sizeof(sArgCmd));
+
+		for (int item = 0; item < g_iWeaponDataNum; item++)
+		{
+			g_hWeaponData.cmd.GetString(item, sCmd, sizeof(sCmd));
+			if (StrEqual(sArgCmd, sCmd))
+			{
+				if (CanClientStartVote(iClient)) {
+					StartVote(iClient, item);
+				}
+				
+				return Plugin_Handled;
+			}
+		}
+    }
+
+	return Plugin_Continue;
+}
+
+/**
+  * Called when the client has entered a menu command.
+  *
+  * @param iClient			Client index.
+  * @param iArgs			Number of arguments.
+  *
+  * @return Plugin_Handled
+  */
 public Action Cmd_ShowMenu(int iClient, int iArgs)
 {
 	if (!iClient || !CanClientStartVote(iClient)) {
 		return Plugin_Handled;
 	}
 
-	ShowMenu(iClient);
+	if (g_bReadyUpAvailable && IsInReady()) {
+		ToggleReadyPanel(false, iClient);
+	}
+
+	g_hMenu.Display(iClient, MENU_TIME_FOREVER);
+
 	return Plugin_Handled;
 }
 
-// ------------------------------------------------------------------------------------- MENU
+/**
+  * Preparing a static menu.
+  *
+  * @noreturn
+  */
 void InitMenu()
 {
 	g_hMenu = new Menu(HandleClickMenu);
 
 	char sMenuTitle[64];
 	Format(sMenuTitle, sizeof(sMenuTitle), "%t", "MENU_TITLE");
-
 	g_hMenu.SetTitle(sMenuTitle);
 
-	for (int item = 0; item < sizeof(sWeaponData); item += 3)
+	char sWeaponId[MAX_WEAPON_DATA_ID];
+	char sWeaponName[MAX_WEAPON_DATA_NAME];
+
+	for (int item = 0; item < g_iWeaponDataNum; item ++)
 	{
-		g_hMenu.AddItem(sWeaponData[item], sWeaponData[item + WEAPON_NAME]);
+		g_hWeaponData.id.GetString(item, sWeaponName, sizeof(sWeaponName));
+		g_hWeaponData.name.GetString(item, sWeaponName, sizeof(sWeaponName));
+		g_hMenu.AddItem(sWeaponId, sWeaponName);
 	}
 	
 	g_hMenu.ExitButton = true;
 }
 
-public void ShowMenu(int iClient)
-{
-	if (g_bReadyUpAvailable && IsInReady()) {
-		ToggleReadyPanel(false, iClient);
-	}
-
-	g_hMenu.Display(iClient, MENU_TIME_FOREVER);
-}
-
+/**
+  * Menu item selection handler.
+  *
+  * @param hMenu		Menu ID.
+  * @param iClient		Client index.
+  * @param iIndex		Item index.
+  *
+  * @return				Status code.
+  */
 public int HandleClickMenu(Menu hMenu, MenuAction iAction, int iClient, int iIndex)
 {
-	switch (iAction) 
-	{
+	switch (iAction) {
 		case MenuAction_Select: {
 			// Is a new vote allowed?
 			if (!IsNewBuiltinVoteAllowed()) {
@@ -220,7 +436,7 @@ public int HandleClickMenu(Menu hMenu, MenuAction iAction, int iClient, int iInd
 				return 0;
 			}
 
-			ForceVote(iClient, iIndex * 3);
+			StartVote(iClient, iIndex);
 		}
 		case MenuAction_Cancel: {
 			if (g_bReadyUpAvailable) {
@@ -232,8 +448,15 @@ public int HandleClickMenu(Menu hMenu, MenuAction iAction, int iClient, int iInd
 	return 0;
 }
 
-// ------------------------------------------------------------------------------------- VOTE
-public void ForceVote(int iClient, int iItem) 
+/**
+  * Start voting.
+  *
+  * @param iClient		Client index.
+  * @param iItem		Weapon index.
+  *
+  * @return				Status code.
+  */
+public void StartVote(int iClient, int iItem) 
 {
 	// Set Item
 	g_iVotingItem = iItem;
@@ -244,42 +467,35 @@ public void ForceVote(int iClient, int iItem)
 
 	for (int i = 1; i <= MaxClients; i++) 
 	{
-		if (!IsClientInGame(i) || IsFakeClient(i) || (GetClientTeam(i) == TEAM_SPEC)) {
+		if (!IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) == TEAM_SPEC) {
 			continue;
 		}
 
 		iPlayers[iNumPlayers++] = i;
 	}
 
+	// Create vote
+	g_hVote = CreateBuiltinVote(HandleActionVote, BuiltinVoteType_Custom_YesNo, BuiltinVoteAction_Cancel | BuiltinVoteAction_VoteEnd | BuiltinVoteAction_End);
+	SetBuiltinVoteInitiator(g_hVote, iClient);
+	SetBuiltinVoteResultCallback(g_hVote, HandleVoteResult);
+
 	char sVoteTitle[MAX_VOTE_MESSAGE_LENGTH];
-	Format(sVoteTitle, sizeof(sVoteTitle), "%t", "VOTE_TITLE", iClient, sWeaponData[g_iVotingItem + WEAPON_NAME]);
+	char sWeaponName[MAX_WEAPON_DATA_NAME];
+	g_hWeaponData.name.GetString(g_iVotingItem, sWeaponName, sizeof(sWeaponName));
+	Format(sVoteTitle, sizeof(sVoteTitle), "%t", "VOTE_TITLE", iClient, sWeaponName);
+	SetBuiltinVoteArgument(g_hVote, sVoteTitle);
 
-	InitVote(iClient, sVoteTitle);
-	ShowVote(iPlayers, iNumPlayers);
-
+	// Show vote
+	DisplayBuiltinVote(g_hVote, iPlayers, iNumPlayers, TIMER_VOTE_HIDE);
 	FakeClientCommand(iClient, "Vote Yes");
 }
 
-void InitVote(int iInitiator, const char[] sVoteTitle) 
-{
-	g_hVote = CreateBuiltinVote(HandleActionVote, BuiltinVoteType_Custom_YesNo, BuiltinVoteAction_Cancel | BuiltinVoteAction_VoteEnd | BuiltinVoteAction_End);
-	SetBuiltinVoteInitiator(g_hVote, iInitiator);
-	SetBuiltinVoteArgument(g_hVote, sVoteTitle);
-	SetBuiltinVoteResultCallback(g_hVote, HandleVoteResult);
-}
-
-void ShowVote(int[] iPlayers, int iNumPlayers)
-{
-	DisplayBuiltinVote(g_hVote, iPlayers, iNumPlayers, TIMER_DELAY);
-}
-
 /**
- * Вызывается, когда завершилось действие в голосовании
+ * Called when the action in the vote has completed.
  *
- * @param hVote 			Идентификатор, по которому проводится голосование.
- * @param iAction			Действие.
- * @param iParam1			Первый параметр (client).
- * @param iParam2			Второй параметр (item).
+ * @param hVote 			Voting ID.
+ * @param iAction			Action: BuiltinVoteAction_End, BuiltinVoteAction_Cancel
+ * @param iParam1			(client).
  *
  * @noreturn
  */
@@ -297,24 +513,21 @@ public void HandleActionVote(Handle hVote, BuiltinVoteAction iAction, int iParam
 }
 
 /**
-  * Обратный вызов, когда голосование закончилось и доступны результаты.
+  * Callback when voting is over and results are available.
   *
-  * @param hVote 			Идентификатор, по которому проводится голосование.
-  * @param num_votes 		Общее количество подсчитанных голосов.
-  * @param num_clients 		Количество клиентов, которые могли голосовать.
-  * @param client_info 		Массив клиентов. Используйте определения VOTEINFO_CLIENT_.
-  * @param num_items 		Количество выбранных уникальных элементов.
-  * @param item_info 		Массив элементов, отсортированных по количеству.
+  * @param hVote 			Voting ID.
+  * @param iVotes 			Total votes counted.
+  * @param iItemsInfo 		Array of elements sorted by count.
   *
   * @noreturn
   */
-public void HandleVoteResult(Handle hVote, int num_votes, int num_clients, const int[][] client_info, int num_items, const int[][] item_info)
+public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const int[][] client_info, int num_items, const int[][] iItemsInfo)
 {
 	if (g_bReadyUpAvailable) {
 		ToggleReadyPanel(true);
 	}
 
-	if (item_info[0][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && item_info[0][BUILTINVOTEINFO_ITEM_VOTES] > (num_votes / 2)) 
+	if (iItemsInfo[0][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && iItemsInfo[0][BUILTINVOTEINFO_ITEM_VOTES] > (iVotes / 2)) 
 	{
 			if (g_bReadyUpAvailable && !IsInReady()) {
 				DisplayBuiltinVoteFail(hVote, BuiltinVoteFail_Loses);
@@ -324,20 +537,17 @@ public void HandleVoteResult(Handle hVote, int num_votes, int num_clients, const
 			int initiator = GetBuiltinVoteInitiator(hVote);	
 
 			char sVoteMsg[MAX_VOTE_MESSAGE_LENGTH];
-			Format(sVoteMsg, sizeof(sVoteMsg), "%t", "VOTE_PASS", initiator, sWeaponData[g_iVotingItem + WEAPON_NAME]);
-
-			char sWeapon[MAX_ENTITY_NAME_LENGTH];
-			strcopy(sWeapon, sizeof(sWeapon), sWeaponData[g_iVotingItem]);
-
+			char sWeaponName[MAX_WEAPON_DATA_NAME];
+			g_hWeaponData.name.GetString(g_iVotingItem, sWeaponName, sizeof(sWeaponName));
+			Format(sVoteMsg, sizeof(sVoteMsg), "%t", "VOTE_PASS", initiator, sWeaponName);
 			DisplayBuiltinVotePass(hVote, sVoteMsg);
-			
 
-			if (!IsClientInGame(initiator) || !IsPlayerAlive(initiator) || GetClientTeam(initiator) != TEAM_SURV) {
+			if (IsClientInGame(initiator) && IsPlayerAlive(initiator) && GetClientTeam(initiator) == TEAM_SURV) {
+				char sWeaponId[MAX_WEAPON_DATA_ID];
+				g_hWeaponData.id.GetString(g_iVotingItem, sWeaponId, sizeof(sWeaponId));
+				GiveClientItem(initiator, sWeaponId);
 				return;
 			}
-
-			GiveClientItem(initiator, sWeapon);
-			return;
 	}
 
 	// Vote Failed
@@ -345,11 +555,15 @@ public void HandleVoteResult(Handle hVote, int num_votes, int num_clients, const
 	return;
 }
 
-// ------------------------------------------------------------------------------------- OTHER
+/**
+  * @param iClient			Client index.
+  *
+  * @return 				true or false.
+  */
 bool CanClientStartVote(int iClient) 
 {
 	if (GetClientTeam(iClient) != TEAM_SURV) {
-		// SEND MESSAGE
+		CPrintToChat(iClient, "%t", "IF_NOT_SURV");
 		return false;
 	}
 
@@ -374,6 +588,14 @@ bool CanClientStartVote(int iClient)
 	return true;
 }
 
+/**
+  * Gives the player a weapon.
+  *
+  * @param iClient			Client index.
+  * @param sWeaponName 		weapon_*.
+  *
+  * @noreturn
+  */
 void GiveClientItem(int iClient, const char[] sWeaponName) 
 {
 #if (SOURCEMOD_V_MINOR == 11)
