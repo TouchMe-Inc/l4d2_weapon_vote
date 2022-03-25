@@ -9,16 +9,34 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define TIMER_VOTE_HIDE 15
 
+public Plugin myinfo =
+{
+	name = "Weapon vote",
+	author = "TouchMe",
+	description = "Issues weapons based on voting results",
+	version = "1.0rc"
+};
+
+
+#define TIMER_VOTE_HIDE         15
+
+#define MAX_MENU_TITLE_LENGTH   64
 #define MAX_VOTE_MESSAGE_LENGTH 128
 
-#define MAX_WEAPON_DATA_ID 32
-#define MAX_WEAPON_DATA_NAME 64
-#define MAX_WEAPON_DATA_CMD 32
+#define MAX_WEAPON_DATA_ID      32
+#define MAX_WEAPON_DATA_NAME    64
+#define MAX_WEAPON_DATA_CMD     32
 
-#define TEAM_SPEC 1
-#define TEAM_SURV 2
+#define TEAM_SPECTATOR          1
+#define TEAM_SURVIVOR           2 
+
+#define IS_VALID_CLIENT(%1)     (%1 > 0 && %1 <= MaxClients)
+#define IS_SURVIVOR(%1)         (GetClientTeam(%1) == TEAM_SURVIVOR)
+#define IS_SPECTATOR(%1)        (GetClientTeam(%1) == TEAM_SPECTATOR)
+#define IS_VALID_INGAME(%1)     (IS_VALID_CLIENT(%1) && IsClientInGame(%1))
+#define IS_VALID_SURVIVOR(%1)   (IS_VALID_INGAME(%1) && IS_SURVIVOR(%1))
+#define IS_SURVIVOR_ALIVE(%1)   (IS_VALID_SURVIVOR(%1) && IsPlayerAlive(%1))
 
 
 enum struct WeaponData
@@ -28,7 +46,7 @@ enum struct WeaponData
 	ArrayList cmd;
 }
 
-int 
+int
 	g_iVotingItem = 0,
 	g_iWeaponDataNum = 0;
 
@@ -36,23 +54,15 @@ bool
 	g_bReadyUpAvailable = false,
 	g_bRoundIsLive = false;
 
-Menu 
+Menu
 	g_hMenu = null;
 
-Handle 
+Handle
 	g_hVote = null;
 
-WeaponData 
+WeaponData
 	g_hWeaponData;
 
-
-public Plugin myinfo =
-{
-	name = "Weapon vote",
-	author = "TouchMe",
-	description = "Issues weapons based on voting results",
-	version = "1.0rc"
-};
 
 public void OnPluginStart()
 {
@@ -400,7 +410,7 @@ void InitMenu()
 {
 	g_hMenu = new Menu(HandleClickMenu);
 
-	char sMenuTitle[64];
+	char sMenuTitle[MAX_MENU_TITLE_LENGTH];
 	Format(sMenuTitle, sizeof(sMenuTitle), "%t", "MENU_TITLE");
 	g_hMenu.SetTitle(sMenuTitle);
 
@@ -467,7 +477,7 @@ public void StartVote(int iClient, int iItem)
 
 	for (int i = 1; i <= MaxClients; i++) 
 	{
-		if (!IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) == TEAM_SPEC) {
+		if (!IS_VALID_CLIENT(i) || IsFakeClient(i) || IS_SPECTATOR(i)) {
 			continue;
 		}
 
@@ -542,7 +552,7 @@ public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const in
 			Format(sVoteMsg, sizeof(sVoteMsg), "%t", "VOTE_PASS", initiator, sWeaponName);
 			DisplayBuiltinVotePass(hVote, sVoteMsg);
 
-			if (IsClientInGame(initiator) && IsPlayerAlive(initiator) && GetClientTeam(initiator) == TEAM_SURV) {
+			if (IS_SURVIVOR_ALIVE(initiator)) {
 				char sWeaponId[MAX_WEAPON_DATA_ID];
 				g_hWeaponData.id.GetString(g_iVotingItem, sWeaponId, sizeof(sWeaponId));
 				GiveClientItem(initiator, sWeaponId);
@@ -562,7 +572,7 @@ public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const in
   */
 bool CanClientStartVote(int iClient) 
 {
-	if (GetClientTeam(iClient) != TEAM_SURV) {
+	if (!IS_VALID_SURVIVOR(iClient)) {
 		CPrintToChat(iClient, "%t", "IF_NOT_SURV");
 		return false;
 	}
