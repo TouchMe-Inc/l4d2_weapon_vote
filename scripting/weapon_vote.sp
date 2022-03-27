@@ -477,7 +477,7 @@ public void StartVote(int iClient, int iItem)
 
 	for (int i = 1; i <= MaxClients; i++) 
 	{
-		if (!IS_VALID_INGAME(i) || IsFakeClient(i) || IS_SPECTATOR(i)) {
+		if (!IsClientInGame(i) || IsFakeClient(i) || IS_SPECTATOR(i)) {
 			continue;
 		}
 
