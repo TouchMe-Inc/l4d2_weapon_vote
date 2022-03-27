@@ -539,7 +539,7 @@ public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const in
 
 	if (iItemsInfo[0][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && iItemsInfo[0][BUILTINVOTEINFO_ITEM_VOTES] > (iVotes / 2)) 
 	{
-			if (g_bReadyUpAvailable && !IsInReady()) {
+			if (g_bRoundIsLive || g_bReadyUpAvailable && !IsInReady()) {
 				DisplayBuiltinVoteFail(hVote, BuiltinVoteFail_Loses);
 				return;
 			}
