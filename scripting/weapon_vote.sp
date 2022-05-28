@@ -536,28 +536,31 @@ public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const in
 	if (g_bReadyUpAvailable) {
 		ToggleReadyPanel(true);
 	}
-
-	if (iItemsInfo[0][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && iItemsInfo[0][BUILTINVOTEINFO_ITEM_VOTES] > (iVotes / 2)) 
+	
+	for (new iItem = 0; iItem < num_items; iItem++)
 	{
-			if (g_bRoundIsLive || g_bReadyUpAvailable && !IsInReady()) {
-				DisplayBuiltinVoteFail(hVote, BuiltinVoteFail_Loses);
-				return;
-			}
+		if (iItemsInfo[iItem][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && iItemsInfo[iItem][BUILTINVOTEINFO_ITEM_VOTES] > (iVotes / 2)) 
+		{
+				if (g_bRoundIsLive || g_bReadyUpAvailable && !IsInReady()) {
+					DisplayBuiltinVoteFail(hVote, BuiltinVoteFail_Loses);
+					return;
+				}
 
-			int initiator = GetBuiltinVoteInitiator(hVote);	
+				int initiator = GetBuiltinVoteInitiator(hVote);	
 
-			char sVoteMsg[MAX_VOTE_MESSAGE_LENGTH];
-			char sWeaponName[MAX_WEAPON_DATA_NAME];
-			g_hWeaponData.name.GetString(g_iVotingItem, sWeaponName, sizeof(sWeaponName));
-			Format(sVoteMsg, sizeof(sVoteMsg), "%t", "VOTE_PASS", initiator, sWeaponName);
-			DisplayBuiltinVotePass(hVote, sVoteMsg);
+				char sVoteMsg[MAX_VOTE_MESSAGE_LENGTH];
+				char sWeaponName[MAX_WEAPON_DATA_NAME];
+				g_hWeaponData.name.GetString(g_iVotingItem, sWeaponName, sizeof(sWeaponName));
+				Format(sVoteMsg, sizeof(sVoteMsg), "%t", "VOTE_PASS", initiator, sWeaponName);
+				DisplayBuiltinVotePass(hVote, sVoteMsg);
 
-			if (IS_SURVIVOR_ALIVE(initiator)) {
-				char sWeaponId[MAX_WEAPON_DATA_ID];
-				g_hWeaponData.id.GetString(g_iVotingItem, sWeaponId, sizeof(sWeaponId));
-				GiveClientItem(initiator, sWeaponId);
-				return;
-			}
+				if (IS_SURVIVOR_ALIVE(initiator)) {
+					char sWeaponId[MAX_WEAPON_DATA_ID];
+					g_hWeaponData.id.GetString(g_iVotingItem, sWeaponId, sizeof(sWeaponId));
+					GiveClientItem(initiator, sWeaponId);
+					return;
+				}
+		}
 	}
 
 	// Vote Failed
