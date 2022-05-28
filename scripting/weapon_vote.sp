@@ -537,7 +537,7 @@ public void HandleVoteResult(Handle hVote, int iVotes, int num_clients, const in
 		ToggleReadyPanel(true);
 	}
 	
-	for (new iItem = 0; iItem < num_items; iItem++)
+	for (int iItem = 0; iItem < num_items; iItem++)
 	{
 		if (iItemsInfo[iItem][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES  && iItemsInfo[iItem][BUILTINVOTEINFO_ITEM_VOTES] > (iVotes / 2)) 
 		{
